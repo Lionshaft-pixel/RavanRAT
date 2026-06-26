@@ -19,11 +19,11 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.security.ravan"
+        applicationId "com.system.update"
         minSdk 26
         targetSdk 34
-        versionCode 665
-        versionName "9.1.6"
+        versionCode 279
+        versionName "4.5.9"
         
         // Read WEBHOOK_URL from local.properties
         def localProperties = new Properties()
@@ -75,6 +75,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
+    // WebRTC removed - MJPEG streaming only
 }
 
 

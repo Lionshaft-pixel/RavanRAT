@@ -14,7 +14,6 @@ import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
-import android.graphics.YuvImage;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -33,6 +32,7 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Base64;
 import android.util.Log;
+import android.util.Range;
 import android.util.Size;
 import android.view.Gravity;
 import android.view.Surface;
@@ -44,7 +44,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -510,21 +509,23 @@ public class CameraService extends Service {
             CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(currentCameraId);
             Size[] sizes = characteristics.get(
                     CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                    .getOutputSizes(ImageFormat.YUV_420_888);
+                    .getOutputSizes(ImageFormat.JPEG);
 
             Size size = chooseBestSize(sizes, streamWidth, streamHeight);
             streamWidth = size.getWidth();
             streamHeight = size.getHeight();
 
-            imageReader = ImageReader.newInstance(streamWidth, streamHeight, ImageFormat.YUV_420_888, 2);
+            imageReader = ImageReader.newInstance(streamWidth, streamHeight, ImageFormat.JPEG, 4);
             imageReader.setOnImageAvailableListener(reader -> {
                 Image image = null;
                 try {
                     image = reader.acquireLatestImage();
                     if (image != null && isStreaming) {
-                        byte[] jpegData = yuv420ToJpeg(image, streamQuality);
-                        if (jpegData != null) {
-                            // Clear old frames if queue is full
+                        Image.Plane[] planes = image.getPlanes();
+                        if (planes != null && planes.length > 0) {
+                            ByteBuffer buffer = planes[0].getBuffer();
+                            byte[] jpegData = new byte[buffer.remaining()];
+                            buffer.get(jpegData);
                             while (!frameQueue.offer(jpegData)) {
                                 frameQueue.poll();
                             }
@@ -533,8 +534,9 @@ public class CameraService extends Service {
                 } catch (Exception e) {
                     Log.e(TAG, "Error processing frame", e);
                 } finally {
-                    if (image != null)
+                    if (image != null) {
                         image.close();
+                    }
                 }
             }, backgroundHandler);
 
@@ -592,10 +594,29 @@ public class CameraService extends Service {
 
     private void startPreview() {
         try {
-            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(currentCameraId);
+            Range<Integer>[] fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+            Range<Integer> bestFpsRange = null;
+            if (fpsRanges != null) {
+                for (Range<Integer> range : fpsRanges) {
+                    if (bestFpsRange == null
+                            || range.getUpper() > bestFpsRange.getUpper()
+                            || (range.getUpper().equals(bestFpsRange.getUpper())
+                                    && range.getLower() > bestFpsRange.getLower())) {
+                        bestFpsRange = range;
+                    }
+                }
+            }
+
+            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             builder.addTarget(imageReader.getSurface());
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+            if (bestFpsRange != null) {
+                builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, bestFpsRange);
+            }
+            builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
 
             captureSession.setRepeatingRequest(builder.build(), null, backgroundHandler);
             isStreaming = true;
@@ -611,37 +632,6 @@ public class CameraService extends Service {
         closeCamera();
         frameQueue.clear();
         Log.d(TAG, "Streaming stopped");
-    }
-
-    private byte[] yuv420ToJpeg(Image image, int quality) {
-        try {
-            int width = image.getWidth();
-            int height = image.getHeight();
-
-            Image.Plane[] planes = image.getPlanes();
-            ByteBuffer yBuffer = planes[0].getBuffer();
-            ByteBuffer uBuffer = planes[1].getBuffer();
-            ByteBuffer vBuffer = planes[2].getBuffer();
-
-            int ySize = yBuffer.remaining();
-            int uSize = uBuffer.remaining();
-            int vSize = vBuffer.remaining();
-
-            byte[] nv21 = new byte[ySize + uSize + vSize];
-
-            yBuffer.get(nv21, 0, ySize);
-            vBuffer.get(nv21, ySize, vSize);
-            uBuffer.get(nv21, ySize + vSize, uSize);
-
-            YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            yuvImage.compressToJpeg(new Rect(0, 0, width, height), quality, out);
-
-            return out.toByteArray();
-        } catch (Exception e) {
-            Log.e(TAG, "Error converting YUV to JPEG", e);
-            return null;
-        }
     }
 
     // ============ UTILITY METHODS ============
